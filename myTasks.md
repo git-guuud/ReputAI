@@ -4,18 +4,31 @@ Things that block progress and that I cannot do.
 
 ## Blocking T6 (Sepolia deployment)
 
-- [ ] **Sepolia RPC URL** — Alchemy/Infura/public endpoint. Put it in `.env` as
-      `SEPOLIA_RPC_URL`. Copy `.env.example` to `.env` first.
-- [ ] **Sepolia testnet ETH** for the deployer address. A faucet is fine; deployment plus
-      a live demo mint needs very little.
-- [ ] **Deployer private key** in `.env` as `PRIVATE_KEY`. Use a throwaway key — never one
-      holding real funds. `.env` is gitignored.
-- [ ] **Etherscan API key** (`ETHERSCAN_API_KEY`) — optional, only for contract verification.
-      Worth having: judges clicking through to verified source is cheap credibility.
+- [x] **Sepolia RPC URL** — using the public endpoint
+      `https://ethereum-sepolia-rpc.publicnode.com`, tested live and written to `.env`. No
+      account needed. Fallback if it rate-limits: `https://1rpc.io/sepolia`. (`rpc.sepolia.org`
+      is dead and `sepolia.drpc.org` now paywalls Sepolia — don't bother with either.)
+- [x] **Deployer private key** — a throwaway account was generated and written to `.env`
+      (gitignored, mode 600). Address: `0x7aD721F362A8049Dd139764B0745657D06d9AA93`.
+- [x] **Etherscan API key** — in `.env`.
+- [x] **Sepolia testnet ETH** — funded and spent; the deployment cost ~0.008 ETH of the 0.05
+      sent. Remaining balance covers the demo transactions.
+      *(original note kept for reference)* `0x7aD721F362A8049Dd139764B0745657D06d9AA93`. ~0.1 ETH is plenty: the deployment is two proxy
+      deployments, two contract deployments, a registration and two grants.
+      Faucets: <https://cloud.google.com/application/web3/faucet/ethereum/sepolia>,
+      <https://sepoliafaucet.com>, <https://sepolia-faucet.pk910.de>.
+
+      *Rent is not a blocker.* The registrar takes ERC-20 only, and the oracle accepts
+      upstream's MockUSDC, whose `mint()` is unpermissioned on testnet — `01_Commit` mints the
+      8.000021 USDC it needs. Gas is the only real cost.
 
 ## Blocking nothing yet, but needed before submission
 
-- [ ] Confirm which ENSv2 contracts are canonically deployed on Sepolia, and whether the
-      track expects us to register under an existing test parent or deploy our own registry.
-      Worth asking in the ETHGlobal ENS channel early — the answer changes T6.
-- [ ] Decide the demo's parent domain name.
+- [x] **Which ENSv2 contracts are canonically deployed on Sepolia** — answered from the
+      submodule's own generated address table (`lib/contracts-v2/contracts/docs/addresses/sepolia.md`,
+      chain 11155111, deployed 2026-06-29) and each address confirmed to hold code on-chain.
+      They are recorded in `script/SepoliaConfig.sol`. We register a real `.eth` name through
+      the real registrar and deploy *beneath* it; we replace nothing.
+- [x] **The demo's parent domain name** — `reputai-sandbox.eth`, confirmed available. Change it
+      by setting `AGENT_PARENT_LABEL` before running `01_Commit`; nothing hard-codes it.
+- [ ] **Record the video** once the live run is done (T6's last exit criterion).

@@ -6,3 +6,6 @@ node_modules/
 .env.*
 !.env.example
 docs/findings/*.local.md
+
+# Fork-test scratch output (01/02 scripts run against a Sepolia fork).
+deployments/fork-test.json

@@ -1,0 +1,13 @@
+{
+  "deployer": "0x7aD721F362A8049Dd139764B0745657D06d9AA93",
+  "duration": 31536000,
+  "endpointKey": "agent:endpoint",
+  "label": "reputai-sandbox",
+  "operatingKey": "agent:operating-key",
+  "operatorRegistry": "0xfeA7D49F56fFBb1ba46ee879ecdE2933FEb8E14b",
+  "operatorTokenId": "82014684042502907806827642409189172684607278140570247175654264894634632151040",
+  "parentName": "reputai-sandbox.eth",
+  "resolver": "0xDdb4717972E663b126f3E2D64df478Eca40f69F5",
+  "sandbox": "0x657Dc79a217eBB8aC22C5B6E9237040cd75Eabf0",
+  "verifier": "0x62BFB71dc67a2ddc4c0B3BE25fa133772b4BB05e"
+}

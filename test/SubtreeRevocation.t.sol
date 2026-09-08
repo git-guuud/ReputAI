@@ -118,4 +118,87 @@ contract SubtreeRevocationTest is Test {
         vm.expectRevert();
         parentRegistry.setSubregistry(id, IRegistry(address(agentRegistry)));
     }
+
+    ////////////////////////////////////////////////////////////////////////
+    // T5 — the fleet, not just one worker
+    ////////////////////////////////////////////////////////////////////////
+
+    /// @dev Spawn extra workers directly in the orchestrator's registry. T5's attenuation is
+    ///      tested against `SubAgentRegistrar` in `test/SubAgentHierarchy.t.sol`; here the point
+    ///      is only that revocation scales to a fleet, so the workers are minted the short way.
+    function _spawnFleet() internal {
+        vm.startPrank(agent);
+        for (uint256 i = 2; i <= 4; ++i) {
+            agentRegistry.register(
+                string.concat("worker-", vm.toString(i)),
+                worker,
+                IRegistry(address(0)),
+                WORKER_RESOLVER,
+                0,
+                uint64(block.timestamp + 365 days)
+            );
+        }
+        vm.stopPrank();
+    }
+
+    /// @notice T5's third exit criterion: revoking the orchestrator takes the *whole fleet*
+    ///         offline, in one transaction, with no enumeration and no per-worker cleanup. The
+    ///         cost of the kill switch does not grow with the size of the fleet - it is one
+    ///         traversal edge either way.
+    function test_revokingOrchestratorTakesTheWholeFleetOffline() external {
+        _spawnFleet();
+
+        for (uint256 i = 1; i <= 4; ++i) {
+            string memory label = string.concat("worker-", vm.toString(i));
+            assertEq(agentRegistry.getResolver(label), WORKER_RESOLVER, "worker is live");
+        }
+
+        vm.prank(operator);
+        parentRegistry.unregister(LibLabel.id(AGENT_LABEL));
+
+        // One severed edge, four workers dark: nothing can route to *.agent-404.operator.eth.
+        assertEq(
+            address(parentRegistry.getSubregistry(AGENT_LABEL)), address(0), "no path to any"
+        );
+        for (uint256 i = 1; i <= 4; ++i) {
+            string memory label = string.concat("worker-", vm.toString(i));
+            assertEq(
+                agentRegistry.getOwner(LibLabel.id(label)),
+                worker,
+                "each entry survives inside the orphan - containment is reachability"
+            );
+        }
+    }
+
+    /// @notice The uncomfortable half of the same fact, stated out loud rather than left for a
+    ///         judge to find: an orphaned registry keeps working *internally*. A revoked
+    ///         orchestrator with registrar rights inside its own subtree can still mint workers
+    ///         there. They are born unreachable - nothing above them routes to the registry - so
+    ///         this is containment, not a breach, but "the fleet is frozen" would be the wrong
+    ///         claim to make on stage.
+    function test_orphanedRegistryStillMintsButNothingCanRouteToIt() external {
+        vm.prank(operator);
+        parentRegistry.unregister(LibLabel.id(AGENT_LABEL));
+
+        vm.prank(agent);
+        agentRegistry.register(
+            "worker-posthumous",
+            worker,
+            IRegistry(address(0)),
+            WORKER_RESOLVER,
+            0,
+            uint64(block.timestamp + 365 days)
+        );
+
+        assertEq(
+            agentRegistry.getResolver("worker-posthumous"),
+            WORKER_RESOLVER,
+            "the orphaned registry still answers for itself"
+        );
+        assertEq(
+            address(parentRegistry.getSubregistry(AGENT_LABEL)),
+            address(0),
+            "but there is no path from the root, so nothing resolves it"
+        );
+    }
 }
