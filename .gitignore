@@ -7,5 +7,9 @@ node_modules/
 !.env.example
 docs/findings/*.local.md
 
-# Fork-test scratch output (01/02 scripts run against a Sepolia fork).
+# Fork-test scratch output (01/02/03 scripts run against a Sepolia fork).
 deployments/fork-test.json
+deployments/fork-demo.json
+
+# Live dress-rehearsal record (label `agent-rehearsal`, revoked). Scratch, not the submission.
+deployments/demo-rehearsal.json

@@ -13,6 +13,14 @@ import {AgentSandbox} from "../src/AgentSandbox.sol";
 import {CounterpartyVerifier} from "../src/CounterpartyVerifier.sol";
 import {Commit} from "../script/01_Commit.s.sol";
 import {Register} from "../script/02_Register.s.sol";
+import {
+    Beat1_Provision,
+    Beat2a_Publish,
+    Beat2b_Pay,
+    Beat2c_Rotate,
+    Beat2d_PayRotated,
+    Beat4_Revoke
+} from "../script/03_Demo.s.sol";
 import {SepoliaConfig} from "../script/SepoliaConfig.sol";
 
 import {IPermissionedRegistry} from "~src/registry/interfaces/IPermissionedRegistry.sol";
@@ -49,7 +57,11 @@ contract SepoliaDeploymentTest is Test {
     address agent;
     uint256 agentPk;
     address treasury = makeAddr("treasury");
-    address counterparty = makeAddr("counterparty");
+    address counterparty;
+    uint256 counterpartyPk;
+
+    /// @dev What each `payAgent()` sends. Small on purpose: the live run spends real testnet ETH.
+    uint256 constant PAYMENT = 0.001 ether;
 
     uint256 keyGenesisPk;
     address keyGenesis;
@@ -69,7 +81,7 @@ contract SepoliaDeploymentTest is Test {
     bytes32 agentNode;
     uint64 agentExpiry;
 
-    bytes message = bytes("agent-404: invoice 17, please pay 0.5 ETH");
+    bytes message = bytes("agent-404: invoice 17, settle to my published payout address");
 
     function setUp() external {
         string memory rpc = vm.envOr("SEPOLIA_RPC_URL", string(""));
@@ -82,6 +94,7 @@ contract SepoliaDeploymentTest is Test {
 
         (deployer, deployerPk) = makeAddrAndKey("reputai-t6-deployer");
         (agent, agentPk) = makeAddrAndKey("agent");
+        (counterparty, counterpartyPk) = makeAddrAndKey("counterparty");
         (keyGenesis, keyGenesisPk) = makeAddrAndKey("operating-key-genesis");
         (keyRotated, keyRotatedPk) = makeAddrAndKey("operating-key-rotated");
 
@@ -94,6 +107,20 @@ contract SepoliaDeploymentTest is Test {
         vm.setEnv("PRIVATE_KEY", vm.toString(deployerPk));
         vm.setEnv("AGENT_PARENT_LABEL", LABEL);
         vm.setEnv("DEPLOYMENT_FILE", "./deployments/fork-test.json");
+
+        // The demo scripts read their whole cast from the environment, so the rehearsal supplies
+        // fork-local keys and reads the same variables the live run will. Nothing about a beat
+        // differs between here and Sepolia except which keys are behind these names.
+        vm.setEnv("DEMO_FILE", "./deployments/fork-demo.json");
+        vm.setEnv("DEMO_AGENT_LABEL", AGENT);
+        vm.setEnv("DEMO_AGENT_PK", vm.toString(agentPk));
+        vm.setEnv("DEMO_COUNTERPARTY_PK", vm.toString(counterpartyPk));
+        vm.setEnv("DEMO_KEY_GENESIS_PK", vm.toString(keyGenesisPk));
+        vm.setEnv("DEMO_KEY_ROTATED_PK", vm.toString(keyRotatedPk));
+        vm.setEnv("DEMO_TREASURY", vm.toString(treasury));
+        vm.setEnv("DEMO_MESSAGE", string(message));
+        vm.setEnv("DEMO_ENDPOINT", ENDPOINT);
+        vm.setEnv("DEMO_PAY_WEI", vm.toString(PAYMENT));
 
         // Block-derived, so this should never fire. If it does, the fork is pinned to a block
         // whose label was already taken -- a false negative, not a real failure.
@@ -162,7 +189,11 @@ contract SepoliaDeploymentTest is Test {
             address(operatorRegistry),
             "eth does not route our label into our registry"
         );
-        assertEq(operatorRegistry.getOwner(_id(LABEL)), address(0), "label minted inside itself");
+        assertEq(
+            operatorRegistry.getOwner(uint256(keccak256(bytes(LABEL)))),
+            address(0),
+            "label minted inside itself"
+        );
     }
 
     /// @notice The sandbox holds exactly the two grants it needs and nothing more. The deployment
@@ -186,35 +217,54 @@ contract SepoliaDeploymentTest is Test {
 
     ////////////////////////////////////////////////////////////////////////
     // IDEA.md section 4, the four beats, on forked Sepolia
+    //
+    // Beats 1, 2 and 4 run `script/03_Demo.s.sol` itself -- the same contracts the live run
+    // broadcasts, driven by the same environment variables -- so a mistake in a demo script
+    // fails here rather than on camera. Beat 3 is the exception and stays inline: its three
+    // transactions must revert, and a `forge script` broadcast refuses to send a reverting
+    // call, so live it runs through `script/03b_escape.sh`. The assertions are the same either
+    // way.
     ////////////////////////////////////////////////////////////////////////
 
-    /// @notice Beat 1 — provision. One call mints the agent's name, grants its role bitmap, wires
-    ///         the resolver and authorizes its two text keys.
+    /// @notice Beat 1 — provision. One operator call mints the agent's name, grants its role
+    ///         bitmap, wires the resolver and authorizes its two text keys; a second publishes
+    ///         the payout address the agent may never move.
     function test_beat1_provision() external {
-        uint256 tokenId = _provision();
+        new Beat1_Provision().run();
+        uint256 tokenId = _tokenId();
 
         assertEq(operatorRegistry.getOwner(tokenId), agent, "agent does not own its name");
         assertEq(operatorRegistry.getResolver(AGENT), address(resolver), "resolver not wired");
+        assertEq(resolver.addr(agentNode), treasury, "payout address not published");
+
+        // Provisioning grants the write surface; it publishes nothing. Beat 2 is the agent's.
+        assertEq(bytes(resolver.text(agentNode, operatingKey)).length, 0, "key pre-seeded");
+        assertEq(
+            bytes(resolver.text(agentNode, SepoliaConfig.ENDPOINT_KEY)).length,
+            0,
+            "endpoint pre-seeded"
+        );
     }
 
     /// @notice Beat 2 — operate. The agent publishes, then rotates its operating key, with no
     ///         operator transaction in between. The verifier follows it across the rotation and
     ///         pays on the new key while refusing the retired one.
     function test_beat2_operateAndRotate() external {
-        _liveAgent();
+        new Beat1_Provision().run();
+        new Beat2a_Publish().run();
 
-        bytes memory sigGenesis = _sign(keyGenesisPk);
-        vm.prank(counterparty);
-        verifier.payAgent{value: 0.5 ether}(agentName, message, sigGenesis);
-        assertEq(treasury.balance, 0.5 ether, "first payment did not land");
+        assertEq(resolver.text(agentNode, SepoliaConfig.ENDPOINT_KEY), ENDPOINT);
+        assertEq(resolver.text(agentNode, operatingKey), Strings.toHexString(keyGenesis));
+
+        new Beat2b_Pay().run();
+        assertEq(treasury.balance, PAYMENT, "first payment did not land");
 
         // The agent rotates. No operator involvement, one transaction, one party.
-        vm.prank(agent);
-        resolver.setText(agentNode, operatingKey, Strings.toHexString(keyRotated));
+        new Beat2c_Rotate().run();
+        assertEq(resolver.text(agentNode, operatingKey), Strings.toHexString(keyRotated));
 
-        vm.prank(counterparty);
-        verifier.payAgent{value: 0.5 ether}(agentName, message, _sign(keyRotatedPk));
-        assertEq(treasury.balance, 1 ether, "verifier did not follow the rotation");
+        new Beat2d_PayRotated().run();
+        assertEq(treasury.balance, 2 * PAYMENT, "verifier did not follow the rotation");
 
         // The retired key stops working in the same breath.
         vm.prank(counterparty);
@@ -225,13 +275,16 @@ contract SepoliaDeploymentTest is Test {
                 agentName
             )
         );
-        verifier.payAgent{value: 0.5 ether}(agentName, message, sigGenesis);
+        verifier.payAgent{value: PAYMENT}(agentName, message, _sign(keyGenesisPk));
     }
 
     /// @notice Beat 3 — attempted escape. The three moves that would break containment, all
-    ///         reverting against the live registry and resolver.
+    ///         reverting against the live registry and resolver. Inline rather than scripted
+    ///         because these calls must fail; `03b_escape.sh` sends the same three live.
     function test_beat3_escapeAttemptsAllRevert() external {
-        uint256 tokenId = _liveAgent();
+        new Beat1_Provision().run();
+        new Beat2a_Publish().run();
+        uint256 tokenId = _tokenId();
 
         vm.startPrank(agent);
 
@@ -256,17 +309,18 @@ contract SepoliaDeploymentTest is Test {
     ///         Nothing about the agent changed: it still holds its key and its records still
     ///         exist. What changed is that nothing can route to them.
     function test_beat4_revocationStopsTheMoney() external {
-        uint256 tokenId = _liveAgent();
+        new Beat1_Provision().run();
+        new Beat2a_Publish().run();
+        new Beat2b_Pay().run();
+        assertEq(treasury.balance, PAYMENT, "agent was not live before revocation");
 
-        vm.prank(counterparty);
-        verifier.payAgent{value: 0.5 ether}(agentName, message, _sign(keyGenesisPk));
-        assertEq(treasury.balance, 0.5 ether, "agent was not live before revocation");
+        new Beat2c_Rotate().run();
+        new Beat4_Revoke().run();
 
-        vm.prank(deployer);
-        operatorRegistry.unregister(tokenId);
+        assertEq(operatorRegistry.getOwner(_tokenId()), address(0), "name survived unregister()");
 
         (CounterpartyVerifier.Refusal reason,,) = verifier.checkAgent(
-            agentName, message, _sign(keyGenesisPk)
+            agentName, message, _sign(keyRotatedPk)
         );
         assertEq(
             uint256(reason),
@@ -282,40 +336,26 @@ contract SepoliaDeploymentTest is Test {
                 agentName
             )
         );
-        verifier.payAgent{value: 0.5 ether}(agentName, message, _sign(keyGenesisPk));
+        verifier.payAgent{value: PAYMENT}(agentName, message, _sign(keyRotatedPk));
 
-        assertEq(treasury.balance, 0.5 ether, "money moved after revocation");
+        assertEq(treasury.balance, PAYMENT, "money moved after revocation");
+
+        // The records outlive the registry entry -- unreachability, not deletion. Said out loud
+        // here so the demo does not have to claim more than the mechanism delivers.
+        assertEq(
+            resolver.text(agentNode, operatingKey),
+            Strings.toHexString(keyRotated),
+            "records were expected to survive revocation"
+        );
     }
 
     ////////////////////////////////////////////////////////////////////////
     // Helpers
     ////////////////////////////////////////////////////////////////////////
 
-    function _provision() private returns (uint256 tokenId) {
-        string[] memory keys = _allowlist();
-        vm.prank(deployer);
-        tokenId = sandbox.provision(
-            AGENT,
-            agent,
-            address(resolver),
-            IRegistry(address(0)),
-            0,
-            keys,
-            agentExpiry
-        );
-    }
-
-    function _liveAgent() private returns (uint256 tokenId) {
-        tokenId = _provision();
-        vm.prank(deployer);
-        resolver.setAddr(agentNode, treasury);
-        vm.startPrank(agent);
-        resolver.setText(agentNode, SepoliaConfig.ENDPOINT_KEY, ENDPOINT);
-        resolver.setText(agentNode, operatingKey, Strings.toHexString(keyGenesis));
-        vm.stopPrank();
-    }
-
-    function _id(string memory label) private pure returns (uint256) {
-        return uint256(keccak256(bytes(label)));
+    /// @dev What beat 1 recorded. The registry assigns the token ID, so every later beat -- and
+    ///      `03b_escape.sh` -- reads it back from the demo record rather than deriving it.
+    function _tokenId() private view returns (uint256) {
+        return vm.parseJsonUint(vm.readFile("./deployments/fork-demo.json"), ".tokenId");
     }
 }

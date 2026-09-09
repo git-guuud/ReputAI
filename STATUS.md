@@ -1,9 +1,10 @@
 # Status
 
-**Last updated:** 2026-09-08
-**Phase:** T1-T5 done. T6 deployed: `reputai-sandbox.eth` is live on Sepolia, registered through
-the canonical `ETHRegistrar`, with both of our contracts verified on Etherscan. What remains is
-the live demo run and the video.
+**Last updated:** 2026-09-09
+**Phase:** T1-T5 done. T6 deployed *and* the demo is built and rehearsed live: `reputai-sandbox.eth`
+is on Sepolia through the canonical `ETHRegistrar`, both contracts verified on Etherscan, and all
+four beats have been run end-to-end as real transactions under a throwaway label. The only thing
+left in the whole project is recording the video.
 
 ## Completed
 
@@ -134,19 +135,41 @@ the live demo run and the video.
       `0x62BFB71dc67a2ddc4c0B3BE25fa133772b4BB05e`. Routing was re-checked with `cast` from the
       real root rather than trusted from the script's own output.
 
+- **T6 — demo, built and rehearsed live.** `script/03_Demo.s.sol` (one broadcastable contract per
+  beat), `script/03b_escape.sh`, `script/03c_refused.sh`, and the recording runbook
+  `docs/DEMO.md`. The fork test now runs the demo scripts themselves — 101 passing repo-wide,
+  unchanged count, because the beats were rewritten rather than added to. Worth remembering:
+    - **A beat is one command and one party.** Splitting the beats into separate script contracts
+      is not cosmetic: it makes *who signs which transaction* the visible argument (operator
+      provisions and revokes, agent publishes and rotates, counterparty pays), it lets the
+      recording pause on Etherscan between beats, and it lets a beat be re-run in isolation
+      after a fluffed take.
+    - **`forge script` cannot broadcast a transaction that must revert.** It simulates first and
+      aborts. Beat 3's three escape attempts and beat 4's refused payment are exactly the
+      transactions worth showing, so they go through `cast send --gas-limit`, which skips
+      estimation and gets the failure mined. That is why two of the eight demo commands are
+      shell scripts, and it is a constraint of the tool, not a weakness of the claim.
+    - **Revert reasons are decoded locally**, from selectors resolved against the submodule's own
+      error definitions rather than a selector database: `TransferDisallowed` for the transfer
+      (soulbound: transfer is gated on `ROLE_CAN_TRANSFER_ADMIN` held by the *sender*) and
+      `EACUnauthorizedAccountRoles` for the other two, whose `resource` field shows *where* the
+      check happened — the name-wide resource, never one of the agent's two authorized text keys.
+    - **The whole thing was rehearsed on live Sepolia**, not just on a fork, under the throwaway
+      label `agent-rehearsal`: provisioned, published, paid, rotated, paid again on the new key
+      with the retired one refused, three escapes reverted on-chain, revoked, and a final payment
+      refused with `Refused(1, ...)`. Total cost ~0.003 ETH at ~1 gwei.
+    - **`agent-404` is still unminted, deliberately.** Beat 1 is a live mint on camera, which is
+      what makes "nothing pre-seeded" something a viewer can check rather than a claim.
+
 ## In progress
 
 Nothing. Clean stopping point.
 
 ## Pending
 
-T6's **demo**: a `script/03_Demo.s.sol` that runs IDEA.md §4's four beats as live transactions
-against the deployed contracts, and the video. The beats are already proved against real Sepolia
-state in `test/SepoliaDeployment.t.sol`; what the script adds is transactions a viewer can click
-through on Etherscan, with the agent provisioned on camera so "nothing pre-seeded" is visible.
-
-No agent has been provisioned under `reputai-sandbox.eth` yet — deliberately, so beat 1 is a
-live mint during the recording.
+**The video.** Nothing else. Follow `docs/DEMO.md`: eight commands, one per beat, against the
+already-deployed contracts. Demo accounts are funded (operator ~0.032 ETH, agent and counterparty
+~0.0055 each) and the run costs ~0.003 ETH.
 
 ## Verified protocol facts
 
@@ -185,8 +208,16 @@ Things established by reading/running actual code, safe to build on:
 
 ## Known gaps
 
-- The demo has not been run as live transactions or recorded yet. That is the only thing between
-  the current state and a finished submission.
+- The video has not been recorded. That is the only thing between the current state and a
+  finished submission; the beats themselves have been run live once already (`agent-rehearsal`).
+- **Two of the eight demo commands are `cast`, not `forge script`,** because their transactions
+  must revert and a `forge script` broadcast refuses to send a call that reverts in simulation.
+  Same assertions either way — beat 3 is also asserted inline in `test/SepoliaDeployment.t.sol` —
+  but the live escape attempts and the refused payment are sent with an explicit gas limit so the
+  failures are mined and clickable.
+- **The recorded demo is the single-agent path.** The sub-agent fleet going dark (T5) is asserted
+  in tests with this same verifier, not run on camera; `docs/DEMO.md` says so and points at the
+  tests rather than letting the video imply more than it shows.
 - **Resolver grants and records outlive `unregister()`** (namehash is not rotated). Containment is
   unreachability, not deletion, at every tier — the agent's records, and an orphaned child
   registry's entire contents. Stated out loud in IDEA.md §3.4 and asserted in three test files

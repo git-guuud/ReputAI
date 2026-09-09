@@ -31,4 +31,8 @@ Things that block progress and that I cannot do.
       the real registrar and deploy *beneath* it; we replace nothing.
 - [x] **The demo's parent domain name** — `reputai-sandbox.eth`, confirmed available. Change it
       by setting `AGENT_PARENT_LABEL` before running `01_Commit`; nothing hard-codes it.
-- [ ] **Record the video** once the live run is done (T6's last exit criterion).
+- [ ] **Record the video.** Everything it needs is built and rehearsed on live Sepolia. Follow
+      [`docs/DEMO.md`](./docs/DEMO.md): eight commands, one per beat, roughly three minutes of
+      transactions. `agent-404.reputai-sandbox.eth` has never been minted, so beat 1 is a live
+      mint on camera. Balances are already funded (operator ~0.032 ETH, agent and counterparty
+      ~0.0055 each; the whole run costs ~0.003).

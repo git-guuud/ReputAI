@@ -144,11 +144,15 @@ Etherscan. What remains is the recorded demo.
 - [x] Contracts verified on Etherscan (`AgentSandbox`, `CounterpartyVerifier`).
 - [x] The four demo beats from IDEA.md §4 run end-to-end against real Sepolia state, one test
       per beat, through the real root / `.eth` registry / commit-reveal registrar.
-- [ ] **Run the four beats as live transactions** against the deployed contracts. The fork test
-      proves they work against real state; a scripted live run (`script/03_Demo.s.sol`) is what
-      the video records, and provisioning the agent on camera is what makes "nothing
-      pre-seeded" visible. **Next session.**
-- [ ] Video recorded.
+- [x] **Run the four beats as live transactions** against the deployed contracts.
+      `script/03_Demo.s.sol` (one broadcastable contract per beat), plus `script/03b_escape.sh`
+      and `script/03c_refused.sh` for the two beats whose transactions must *revert* — a
+      `forge script` broadcast refuses to send a call that reverts in simulation, so those go
+      through `cast send --gas-limit` and the failures are mined and clickable. Rehearsed
+      end-to-end on live Sepolia under the throwaway label `agent-rehearsal` (provisioned,
+      published, paid, rotated, paid again, three escapes reverted, revoked, payment refused).
+      `agent-404` is deliberately still unminted so beat 1 happens on camera.
+- [ ] Video recorded. Runbook: [`docs/DEMO.md`](./docs/DEMO.md).
 
 Worth remembering:
 

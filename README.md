@@ -143,3 +143,34 @@ cast call 0x67b728a792e789a8978b30cF1b3b641f19354b43 \
   "getSubregistry(string)(address)" "reputai-sandbox" --rpc-url $SEPOLIA_RPC_URL
 # -> 0xfeA7...E14b   our operator registry
 ```
+
+## The demo
+
+IDEA.md §4's four beats, as live transactions against the deployed contracts. One command per
+beat, one party per beat — the operator provisions and revokes, the agent publishes and rotates
+its own key, the counterparty pays through `CounterpartyVerifier` knowing only the ENS root.
+
+```bash
+forge script script/03_Demo.s.sol:Beat1_Provision    --rpc-url sepolia --broadcast  # operator
+forge script script/03_Demo.s.sol:Beat2a_Publish     --rpc-url sepolia --broadcast  # agent
+forge script script/03_Demo.s.sol:Beat2b_Pay         --rpc-url sepolia --broadcast  # counterparty
+forge script script/03_Demo.s.sol:Beat2c_Rotate      --rpc-url sepolia --broadcast  # agent
+forge script script/03_Demo.s.sol:Beat2d_PayRotated  --rpc-url sepolia --broadcast  # counterparty
+script/03b_escape.sh                                                                # agent, 3 reverts
+forge script script/03_Demo.s.sol:Beat4_Revoke       --rpc-url sepolia --broadcast  # operator
+script/03c_refused.sh                                                               # counterparty, refused
+```
+
+Beats 3 and the refused payment are `cast` rather than `forge script` because their transactions
+must **revert**, and `forge script` refuses to broadcast a call that reverts in simulation. They
+are sent with an explicit gas limit so the failures are mined and clickable on Etherscan.
+
+Every beat prints the verifier's verdict before it acts, so the terminal shows the refusal before
+the chain does. `forge script script/03_Demo.s.sol:Status --rpc-url sepolia` is a read-only
+snapshot, safe between beats.
+
+The beats are rehearsed in CI: `test/SepoliaDeployment.t.sol` forks live Sepolia and runs these
+same script contracts, so a mistake in a demo script fails in `forge test` rather than on camera.
+The recording runbook, including what to show on Etherscan at each beat, is
+[`docs/DEMO.md`](docs/DEMO.md).
+
