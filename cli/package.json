@@ -1,0 +1,11 @@
+{
+  "name": "reputai-cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Terminal control room for the agent-bound identity sandbox.",
+  "bin": { "reput": "./reput.mjs" },
+  "dependencies": {
+    "viem": "^2.21.0"
+  }
+}
