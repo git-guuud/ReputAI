@@ -1,168 +1,234 @@
-# Recording runbook — the four beats, live on Sepolia
+# Recording runbook — the control room
 
-Everything here has been run end-to-end against live Sepolia once already, on the throwaway label
-`agent-rehearsal` (revoked at the end of the rehearsal, transactions still on-chain). The name the
-recording mints, `agent-404.reputai-sandbox.eth`, has never existed — which is the point of beat 1
-happening on camera.
+Four panes, three keys, one deployed name on Sepolia. The control room reads the chain and signs
+nothing; each pane beside it holds exactly one party's key. **Which pane a transaction comes from
+is the argument of this project**, so the layout is the demo rather than decoration for it.
 
-Each beat is one command and one party. The commands print what the counterparty sees *before*
-they spend anything, so the terminal alone tells the story; Etherscan is the corroboration.
+```
+▛▀▀ CONTROL ROOM ▀▀▀▀▀▀▀▀▀▀▀▀▀▜▛▀▀ OPERATOR · provision · freeze · revoke ▀▀▜
+▌                             ▐▌  latest action only                       ▐
+▌  the walk from the ENS root ▐▙▄▄ AGENT · publish · rotate · escape ▄▄▄▄▄▄▄▟
+▌  records, and who may write ▐▛▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▜
+▌  the agent's role bitmap    ▐▌  latest action only                       ▐
+▌  the verifier's verdict on  ▐▙▄▄ COUNTERPARTY · check · pay ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+▌    each of two keys         ▐▛▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▜
+▌  every transaction, in the  ▐▌  latest action only                       ▐
+▌  colour of the key that     ▐▌                                           ▐
+▌  signed it                  ▐▌                                           ▐
+▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟▙▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▟
+```
+
+Each pane's top border is a solid bar in that party's colour, carrying its name and the verbs it
+may type — so the verbs are always on screen and you never need to look one up mid-take.
+
+**The shells show only their latest action.** Each clears itself on every command. The running
+history of every transaction lives in the control room's feed, in the colour of the key that
+signed it, so the same evidence is never in two places and no pane fills with scrollback.
+
+Nothing in the control room is held in memory between frames: every value on it is what the
+chain answered at the block stamped in its header. When the operator revokes in one pane, the
+verdict in another goes red on its own, with nobody typing.
 
 ---
 
 ## Before you start recording
 
-Nothing here spends gas.
-
 ```bash
-# 1. The tree is real, and it is not ours until the third line.
-cast call 0x11b5BfbE9078D826b1eDBDd1cFC12f5828D9F50C "getSubregistry(string)(address)" "eth" --rpc-url sepolia
-#   -> 0x67b728a792e789a8978b30cF1b3b641f19354b43   the canonical .eth registry
-cast call 0x67b728a792e789a8978b30cF1b3b641f19354b43 "getSubregistry(string)(address)" "reputai-sandbox" --rpc-url sepolia
-#   -> 0xfeA7D49F56fFBb1ba46ee879ecdE2933FEb8E14b   our operator registry, registered through the real registrar
-
-# 2. Nothing is pre-seeded: the agent's name does not exist.
-cast call 0xfeA7D49F56fFBb1ba46ee879ecdE2933FEb8E14b "getResolver(string)(address)" "agent-404" --rpc-url sepolia
-#   -> 0x0000000000000000000000000000000000000000
-
-# 3. Balances (deployer ~0.03 ETH, agent and counterparty ~0.005 each is ample; the whole
-#    demo costs about 0.003 ETH of gas at 1 gwei).
-cast balance 0x7aD721F362A8049Dd139764B0745657D06d9AA93 --rpc-url sepolia -e   # operator
-cast balance 0x526241340F1CC21e5606c195dAB7ecCf8d725D9b --rpc-url sepolia -e   # agent
-cast balance 0x23cff83468a019182baA373776E95Ee8b95301e5 --rpc-url sepolia -e   # counterparty
+cd cli && npm install && cd ..     # once
+export DEMO_AGENT_LABEL=agent-407  # any label not yet minted — see below
+./demo.sh --fresh                  # clears the transaction feed, then opens the four panes
 ```
 
-Tabs worth having open on <https://sepolia.etherscan.io>:
+> **Pick an unminted label.** `agent-404` was minted on live Sepolia during a test run, so beat 1
+> can no longer mint it on camera. Any unused label under `reputai-sandbox.eth` works, and one
+> variable is enough: the endpoint and the signed message both default off the label, and `.env`
+> values naming a *different* label are ignored rather than quietly printed. Check a candidate
+> before you record:
+>
+> ```bash
+> cast call 0xfeA7D49F56fFBb1ba46ee879ecdE2933FEb8E14b \
+>   "getResolver(string)(address)" "agent-407" --rpc-url sepolia   # want 0x0…0
+> ```
+
+Terminal wants to be **at least 180 columns** — the control room needs 84 and stretches to fill
+whatever it is given, and it says so if it has fewer. `./demo.sh` alone re-attaches to a running
+session; `./demo.sh --kill` tears it down.
+
+Nothing above spends gas. Three checks worth doing on camera before beat 1:
+
+```bash
+node cli/reput.mjs counterparty status
+```
+
+- the tree resolves `root → eth → reputai-sandbox`, all three canonical addresses;
+- the agent's name **does not exist** — the control room says so in as many words, which is what
+  makes "nothing is pre-seeded" checkable rather than claimed;
+- both verifier lights are red, `Unresolvable`.
+
+Balances: operator ~0.032 ETH, agent and counterparty ~0.005 each. The whole run costs about
+0.003 ETH at 1 gwei.
+
+Etherscan tabs worth having open:
 
 | What | Address |
 |---|---|
-| Operator registry (our subdomain registry) | `0xfeA7D49F56fFBb1ba46ee879ecdE2933FEb8E14b` |
+| Operator registry | `0xfeA7D49F56fFBb1ba46ee879ecdE2933FEb8E14b` |
 | `PermissionedResolver` | `0xDdb4717972E663b126f3E2D64df478Eca40f69F5` |
 | `AgentSandbox` (verified) | `0x657Dc79a217eBB8aC22C5B6E9237040cd75Eabf0` |
 | `CounterpartyVerifier` (verified) | `0x62BFB71dc67a2ddc4c0B3BE25fa133772b4BB05e` |
-| Agent EOA | `0x526241340F1CC21e5606c195dAB7ecCf8d725D9b` |
-| Counterparty EOA | `0x23cff83468a019182baA373776E95Ee8b95301e5` |
-| Treasury (`addr()`, where payments land) | `0x9819C0a9Ae19Cda1B59325132eE26a5C807Ef98f` |
 
-The three parties are separate keys, and that is the argument: watch the `From` column change.
+Every action prints its own Etherscan link, so the tabs are corroboration rather than navigation.
 
 ---
 
-## Beat 1 — provision (operator)
+## Beat 1 — provision · **operator pane**
 
-```bash
-forge script script/03_Demo.s.sol:Beat1_Provision --rpc-url sepolia --broadcast
+```
+provision
 ```
 
-Two transactions from the operator: `AgentSandbox.provision()` mints the name, grants the agent
-its role bitmap (**zero registry roles** — the tightest sandbox the ceiling allows), wires the
-resolver and authorizes exactly two text keys; then the operator publishes `addr()`.
+Two transactions from the operator's key. `AgentSandbox.provision()` mints the name, grants the
+agent its role bitmap — **zero registry roles**, the tightest the ceiling allows — wires the
+resolver and authorizes exactly two text keys. Then the operator publishes `addr()`, because
+`provision()` grants `ROLE_SET_ADDR` to nobody.
 
-Say: the agent is being handed an identity it can operate and cannot own. `provision()` grants
-`ROLE_SET_ADDR` to nobody, so the payout address is the operator's and stays the operator's.
+Watch the control room: the fourth line of the tree fills in, `addr()` appears against
+`operator`, and `THE BOX` reads `registry roles 0x0 — none at all`.
 
-Show: the `AgentProvisioned` event on the sandbox — the role bitmap and the two authorized keys
-are in the log, so the containment is auditable from the receipt.
+Say: the agent is being handed an identity it can operate and cannot own.
 
-## Beat 2a — the agent publishes (agent)
+## Beat 2a — the agent publishes · **agent pane**
 
-```bash
-forge script script/03_Demo.s.sol:Beat2a_Publish --rpc-url sepolia --broadcast
+```
+publish
 ```
 
-Two transactions **from the agent's own key**: its endpoint, and the key it will sign with.
-No operator transaction in between, now or later in beat 2.
+Two transactions from the **agent's own key** — its endpoint and the key it will sign with. No
+operator transaction in between, now or later in beat 2. The control room's `writable by` column
+now says `agent` against both text keys, and `operator` against `addr()`, and its first verdict
+light turns green on its own.
 
-## Beat 2b — the counterparty pays (counterparty)
+## Beat 2b — the counterparty pays · **counterparty pane**
 
-```bash
-forge script script/03_Demo.s.sol:Beat2b_Pay --rpc-url sepolia --broadcast
+```
+pay
 ```
 
-The script prints the verifier's verdict *before* it sends: resolver, endpoint, operating key,
-`payTo`, the address the signature recovers to, and `None (would transact)`.
+It prints the verifier's verdict *before* it spends — the key the name publishes, the key it
+signed with, the address the money would reach, and `would transact`. Then it pays.
 
 Say: this counterparty was handed the ENS root address and nothing else. It walks the tree
 itself, and it pays the resolved `addr()` — never an address the agent named in its message.
 
-## Beat 2c — the agent rotates its key (agent)
+## Beat 2c — the agent rotates its own key · **agent pane**
 
-```bash
-forge script script/03_Demo.s.sol:Beat2c_Rotate --rpc-url sepolia --broadcast
+```
+rotate
 ```
 
-One transaction, one party, no operator, no downtime. The script asserts `addr()` is unchanged
-by the rotation before it exits.
+One transaction, one party, no operator, no downtime. It asserts `addr()` is unchanged before it
+returns. **Watch the control room while you say this**: the two verifier lights swap, and the
+`← the name publishes this one` marker moves, without anyone touching the counterparty.
 
-## Beat 2d — the counterparty follows, and the retired key stops (counterparty)
+## Beat 2d — the counterparty follows · **counterparty pane**
 
-```bash
-forge script script/03_Demo.s.sol:Beat2d_PayRotated --rpc-url sepolia --broadcast
+```
+pay
+pay retired
 ```
 
-Second payment lands on the new key. Then the same message under the **retired** key prints
-`KeyMismatch (REFUSED)` — the rotation is a rotation, not a fork.
+The first re-resolves and pays on the new key, having been told nothing — `pay` always signs
+with whatever key the name currently publishes, which is why it follows a rotation without being
+told. The second forces the **retired** key and is refused `KeyMismatch` — a rotation, not a
+fork. The refusal is sent anyway, so it is a transaction you can click.
 
-Show: the treasury balance is now 0.002 ETH, from two payments signed by two different keys.
+## Beat 3 — attempted escape · **agent pane**
 
-## Beat 3 — attempted escape (agent)
-
-```bash
-script/03b_escape.sh
+```
+escape
 ```
 
-Three transactions from the agent's own key, all reverting on-chain:
+Three transactions from the agent's own key, all reverting on-chain, each printed with its
+decoded reason before it is sent:
 
 | Attempt | Revert |
 |---|---|
-| transfer the name to an attacker | `TransferDisallowed` — the name is soulbound: transfer is gated on `ROLE_CAN_TRANSFER_ADMIN` held by the *sender* |
-| repoint the resolver | `EACUnauthorizedAccountRoles(resource = the name, role = ROLE_SET_RESOLVER)` |
-| rewrite the payout address | `EACUnauthorizedAccountRoles(resource = the name-wide resource, role = ROLE_SET_ADDR)` |
+| transfer the name | `TransferDisallowed` — soulbound: transfer is gated on `ROLE_CAN_TRANSFER_ADMIN` held by the *sender* |
+| repoint the resolver | `EACUnauthorized · ROLE_SET_RESOLVER` |
+| rewrite addr() | `EACUnauthorized · ROLE_SET_ADDR` |
 
-The script prints the decoded reason, then sends each one with an explicit gas limit so the
-failure is mined rather than caught in estimation. Open one on Etherscan: a failed transaction
-from the agent, against its own name.
+Three lines, one per attempt, each with the role that was missing and a clickable hash. The
+line under them is worth reading out: the check happened at the **name-wide resource**, never at
+one of the agent's two authorized text keys — text grants confer nothing on `addr()`.
 
 Say: this is a fully compromised agent — whoever holds its key holds everything it has — and the
-blast radius is exactly "can speak, nothing else".
+blast radius is exactly "can speak, nothing else". The control room has not moved.
 
-## Beat 4 — revoke (operator), and the money stops (counterparty)
+## Beat 4 — revoke · **operator pane**, then **counterparty pane**
 
-```bash
-forge script script/03_Demo.s.sol:Beat4_Revoke --rpc-url sepolia --broadcast
-script/03c_refused.sh
+```
+revoke                # operator
+pay                   # counterparty
 ```
 
-`Beat4_Revoke` prints the verifier's verdict either side of one `unregister()`: `None (would
-transact)` before, `Unresolvable (REFUSED)` after, on the same name, same key, same signature.
-`03c_refused.sh` then sends the payment anyway, so the refusal is a transaction you can click:
-`Refused(1, agent-404.reputai-sandbox.eth)`.
+`revoke` prints the verdict either side of one `unregister()`: `would transact` before,
+`Unresolvable` after, on the same name, same key, same signature. Then the control room goes red
+on its own.
 
-Say the honest version of it: the agent's records are **still in the resolver** — the script
-prints them — and the agent never learns it was killed. What the operator removed is the path.
-Containment here is unreachability, not deletion, and the verifier's exact-resolution rule
-(finding 002) is what makes that enough.
+The counterparty then sends the payment anyway, so the refusal is on-chain and clickable:
+`Refused(Unresolvable, agent-404.reputai-sandbox.eth)`.
+
+Say the honest version: the agent's records are **still in the resolver** — `revoke` prints the
+operating key still sitting there — and the agent never learns it was killed. What the operator removed is the path. Containment
+here is unreachability, not deletion, and the verifier's exact-resolution rule
+([finding 002](./findings/002-inherited-resolver-survives-revocation.md)) is what makes that
+enough.
+
+---
+
+## Optional beat — the graduated lever
+
+Worth 20 seconds if the pacing allows, because it answers "so the only response is the kill
+switch?" before a judge asks it. In the **operator pane**:
+
+```
+freeze
+```
+
+Revokes `ROLE_SET_TEXT` on the operating key *only*. The agent then types `rotate` and is refused
+`EACUnauthorizedAccountRoles` — the key is pinned to its last honest value, while the name is
+still live and the endpoint is still the agent's to write. `unfreeze` restores it. This is
+IDEA.md §3.3's middle option, between doing nothing and `unregister()`.
 
 ---
 
 ## If a beat goes wrong mid-recording
 
-Every beat is idempotent except beat 1, and the fix is a fresh label — nothing else has to be
-redone:
+Every beat is idempotent except beat 1, and the fix is a fresh label:
 
 ```bash
-export DEMO_AGENT_LABEL=agent-405     # any unused label under reputai-sandbox.eth
-forge script script/03_Demo.s.sol:Beat1_Provision --rpc-url sepolia --broadcast
+export DEMO_AGENT_LABEL=agent-408     # any unused label under reputai-sandbox.eth
+./demo.sh --kill && ./demo.sh --fresh
 ```
 
-`Beat1_Provision` refuses to run against a label that already has a resolver, so it cannot
-half-overwrite a previous take.
+`provision` refuses to run against a label that already has a resolver, so it cannot
+half-overwrite a previous take. `status`, in any pane, is a free read-only snapshot.
 
-A read-only snapshot, safe to run at any point between beats:
+## Rehearsing without spending anything
+
+The whole run works against a Sepolia fork, which is how it was tested:
 
 ```bash
-forge script script/03_Demo.s.sol:Status --rpc-url sepolia
+anvil --fork-url "$SEPOLIA_RPC_URL" --port 8546 &
+export SEPOLIA_RPC_URL=http://127.0.0.1:8546
+export DEMO_FILE=/tmp/demo-fork.json DEMO_FEED=/tmp/feed-fork.jsonl
+for a in $DEPLOYER_ADDRESS $DEMO_AGENT_ADDRESS $DEMO_COUNTERPARTY_ADDRESS; do
+  cast rpc anvil_setBalance "$a" 0xDE0B6B3A7640000 --rpc-url $SEPOLIA_RPC_URL
+done
+./demo.sh --fresh
 ```
+
+Same contracts, same calls, same output — the fork is the real deployment.
 
 ## What is mocked
 
@@ -179,3 +245,11 @@ lease, and one `unregister()` at the tier above takes the whole fleet offline �
 the outside with this same verifier in `test/SubAgentHierarchy.t.sol` and
 `test/SubtreeRevocation.t.sol`. The recorded demo is the single-agent path, which is the one
 IDEA.md §4 describes; mention the fleet, point at the tests.
+
+## The same beats without the control room
+
+`docs/DEMO-scripts.md` drives the identical transactions through `forge script` and `cast`, one
+command per beat. Those scripts are what `test/SepoliaDeployment.t.sol` exercises on a fork in
+CI. The control room is a second front end onto the same deployed contracts — it sends the same
+calls from the same three keys — and it is the one to record, because a wall of `forge` output
+cannot show a permission boundary holding.

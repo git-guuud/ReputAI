@@ -1,10 +1,9 @@
 # Status
 
-**Last updated:** 2026-09-09
-**Phase:** T1-T5 done. T6 deployed *and* the demo is built and rehearsed live: `reputai-sandbox.eth`
-is on Sepolia through the canonical `ETHRegistrar`, both contracts verified on Etherscan, and all
-four beats have been run end-to-end as real transactions under a throwaway label. The only thing
-left in the whole project is recording the video.
+**Last updated:** 2026-09-13
+**Phase:** T1-T5 done. T6 deployed, rehearsed live, and now fronted by a four-pane terminal
+control room (`./demo.sh`) that drives the same deployed contracts. The only thing left in the
+whole project is recording the video.
 
 ## Completed
 
@@ -158,8 +157,66 @@ left in the whole project is recording the video.
       label `agent-rehearsal`: provisioned, published, paid, rotated, paid again on the new key
       with the retired one refused, three escapes reverted on-chain, revoked, and a final payment
       refused with `Refused(1, ...)`. Total cost ~0.003 ETH at ~1 gwei.
-    - **`agent-404` is still unminted, deliberately.** Beat 1 is a live mint on camera, which is
-      what makes "nothing pre-seeded" something a viewer can check rather than a claim.
+    - **Beat 1 must mint a name that has never existed** — that is what makes "nothing
+      pre-seeded" something a viewer can check rather than a claim. `agent-404` was the intended
+      one and has since been minted on Sepolia in a test run (2026-09-13), so the recording needs
+      a fresh label; see Pending.
+
+- **T7 — the control room.** `cli/` (Node + viem) and `demo.sh`: four tmux panes — a live chain
+  reader plus one shell per party, each holding exactly one key and refusing the other parties'
+  verbs. The eight beats become eight verbs typed in the pane that signs them. Every beat was
+  run end-to-end against `anvil --fork-url` before anything touched the live chain. Worth
+  remembering:
+    - **The presentation *is* the argument here.** The project's claim is about who may do what,
+      and a wall of `forge script` output cannot show a permission boundary holding. The live
+      pane's two verdict lights swapping when the agent rotates in another pane — with nobody
+      touching the counterparty — is beat 2 in one glance, and both going red on `revoke` is
+      beat 4.
+    - **Nothing is held between frames.** Every field on the live pane is a chain read at the
+      block stamped in its header, and every action prints its own Etherscan link. That is what
+      keeps a nice-looking UI from reading as a mock.
+    - **The revert-must-be-mined constraint disappears.** `forge script` refuses to broadcast a
+      call that reverts in simulation, which is why two of the original eight commands were raw
+      `cast`. In viem an explicit `gas` skips estimation, so beat 3 and the refused payments are
+      the same tool as everything else.
+    - **Two bugs the fork rehearsal caught,** neither of which would have been visible without
+      running it: the registry and the resolver reuse bit positions for different roles
+      (`1 << 0` is `ROLE_REGISTRAR` at one and `ROLE_SET_ADDR` at the other), so a revert can
+      only be named correctly if the namespace is named with it; and `payAgent`'s message must
+      be hex-encoded, since viem writes a plain string into a `bytes` parameter verbatim.
+    - **`freeze`/`unfreeze` are new on camera, not new in the design.** IDEA.md §3.3's graduated
+      lever existed only in tests. It is one `authorizeTextRoles(..., false)` call and it answers
+      "so the only response is the kill switch?" before a judge asks it. Confirmed on the fork:
+      the operator does hold the admin nybble needed, and a frozen agent's `rotate` reverts at
+      the *name-wide* resource — the documented `onlyPartRoles` fallback, observed rather than
+      assumed.
+    - **The forge scripts stay.** They are what `test/SepoliaDeployment.t.sol` exercises in CI,
+      and they are documented in `docs/DEMO-scripts.md` as the fallback path. The control room is
+      a second front end onto the same contracts, not a replacement for the tested one.
+    - **Layout, second pass.** The first version had four panes that read as one merged surface
+      and three shells each scrolling their own wall of output. Both are fixed, and the fixes are
+      the same idea: say each thing once, in the place that owns it.
+        - Each pane's **top border is a full-width solid bar in that party's colour**, carrying
+          its name *and its verbs*, so nothing has to be looked up mid-take. `pane-border-format`
+          is a window option and cannot vary per pane, so the colour comes from `@bar`, a
+          per-pane user option — one format, four colours. (`select-pane -P` is the wrong lever:
+          it styles the pane's *contents*, not its border, and would tint the output.)
+        - **Each shell clears itself on every command** and shows only its latest action. The
+          running history already lives in the control room's feed, coloured by signing key, so
+          a shell that also scrolled one would be the same evidence twice in the place with the
+          least room for it. Per-beat output went from ~11 lines to 3-8.
+        - Etherscan URLs are **OSC 8 hyperlinks** with the tx hash as the label: an 84-column
+          pane cannot hold a full URL without wrapping, and a wrapped URL is neither pretty nor
+          clickable.
+        - The control room **stretches to its pane** (84-120 columns) instead of leaving a third
+          of it blank, and its two key lights are now labelled `genesis`/`rotated` with a marker
+          on whichever the name publishes right now — the same vocabulary the shells use.
+    - **Two more bugs the fork rehearsal caught.** `revoke` verified against a hard-coded rotated
+      key, so its "before" line read `KeyMismatch` whenever it ran without beat 2c — destroying
+      the beat's whole contrast; it now asks with whatever key the name currently publishes. And
+      `DEMO_ENDPOINT`/`DEMO_MESSAGE` in `.env` name a label, so a fresh label silently kept
+      publishing the old one's endpoint; both now default off `DEMO_AGENT_LABEL`, and an `.env`
+      value naming a different label is ignored rather than quietly printed.
 
 ## In progress
 
@@ -167,9 +224,14 @@ Nothing. Clean stopping point.
 
 ## Pending
 
-**The video.** Nothing else. Follow `docs/DEMO.md`: eight commands, one per beat, against the
+**The video.** Nothing else. Follow `docs/DEMO.md`: pick an unminted label, `./demo.sh --fresh`,
+then eight verbs typed into the pane belonging to the party that signs each one, against the
 already-deployed contracts. Demo accounts are funded (operator ~0.032 ETH, agent and counterparty
 ~0.0055 each) and the run costs ~0.003 ETH.
+
+**`agent-404` is minted on live Sepolia** as of 2026-09-13 (a test run), so it can no longer be
+minted on camera and beat 1 needs a fresh label. `DEMO_AGENT_LABEL` is the only variable to set:
+the endpoint and the signed message both derive from it.
 
 ## Verified protocol facts
 
@@ -210,11 +272,14 @@ Things established by reading/running actual code, safe to build on:
 
 - The video has not been recorded. That is the only thing between the current state and a
   finished submission; the beats themselves have been run live once already (`agent-rehearsal`).
-- **Two of the eight demo commands are `cast`, not `forge script`,** because their transactions
-  must revert and a `forge script` broadcast refuses to send a call that reverts in simulation.
-  Same assertions either way — beat 3 is also asserted inline in `test/SepoliaDeployment.t.sol` —
-  but the live escape attempts and the refused payment are sent with an explicit gas limit so the
-  failures are mined and clickable.
+- **The control room is not covered by `forge test`.** `test/SepoliaDeployment.t.sol` forks
+  Sepolia and runs the *forge scripts*; the CLI is a separate front end onto the same contracts
+  and was verified by running all eight beats against `anvil --fork-url` by hand. Both paths send
+  the same calls from the same three keys, but only one of them fails in CI.
+- **Two of the eight `forge`/`cast` demo commands are `cast`,** because their transactions must
+  revert and a `forge script` broadcast refuses to send a call that reverts in simulation. The
+  control room does not have this problem — an explicit gas limit in viem skips estimation — so
+  this applies only to the `docs/DEMO-scripts.md` path.
 - **The recorded demo is the single-agent path.** The sub-agent fleet going dark (T5) is asserted
   in tests with this same verifier, not run on camera; `docs/DEMO.md` says so and points at the
   tests rather than letting the video imply more than it shows.

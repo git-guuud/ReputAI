@@ -1,8 +1,10 @@
 out/
+assets/
 cache/
 broadcast/
 node_modules/
 .env
+docs/
 .env.*
 !.env.example
 docs/findings/*.local.md
@@ -13,3 +15,8 @@ deployments/fork-demo.json
 
 # Live dress-rehearsal record (label `agent-rehearsal`, revoked). Scratch, not the submission.
 deployments/demo-rehearsal.json
+
+# Control-room CLI deps and its cross-pane transaction feed.
+cli/node_modules/
+deployments/.control-room.jsonl
+deployments/demo-sepolia.json

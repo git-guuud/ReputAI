@@ -146,31 +146,47 @@ cast call 0x67b728a792e789a8978b30cF1b3b641f19354b43 \
 
 ## The demo
 
-IDEA.md §4's four beats, as live transactions against the deployed contracts. One command per
-beat, one party per beat — the operator provisions and revokes, the agent publishes and rotates
-its own key, the counterparty pays through `CounterpartyVerifier` knowing only the ENS root.
+IDEA.md §4's four beats, as live transactions against the deployed contracts, in a four-pane
+terminal control room. The control room reads the chain and signs nothing; each pane beside it
+holds exactly one party's key — the operator provisions and revokes, the agent publishes and
+rotates its own key, the counterparty pays through `CounterpartyVerifier` knowing only the ENS
+root. Which pane a transaction comes from is the argument, so every pane's top border is a solid
+bar in that party's colour carrying its name and the verbs it may type.
 
 ```bash
-forge script script/03_Demo.s.sol:Beat1_Provision    --rpc-url sepolia --broadcast  # operator
-forge script script/03_Demo.s.sol:Beat2a_Publish     --rpc-url sepolia --broadcast  # agent
-forge script script/03_Demo.s.sol:Beat2b_Pay         --rpc-url sepolia --broadcast  # counterparty
-forge script script/03_Demo.s.sol:Beat2c_Rotate      --rpc-url sepolia --broadcast  # agent
-forge script script/03_Demo.s.sol:Beat2d_PayRotated  --rpc-url sepolia --broadcast  # counterparty
-script/03b_escape.sh                                                                # agent, 3 reverts
-forge script script/03_Demo.s.sol:Beat4_Revoke       --rpc-url sepolia --broadcast  # operator
-script/03c_refused.sh                                                               # counterparty, refused
+cd cli && npm install && cd ..
+export DEMO_AGENT_LABEL=agent-407   # any label not yet minted
+./demo.sh --fresh                   # control room, operator, agent, counterparty
 ```
 
-Beats 3 and the refused payment are `cast` rather than `forge script` because their transactions
-must **revert**, and `forge script` refuses to broadcast a call that reverts in simulation. They
-are sent with an explicit gas limit so the failures are mined and clickable on Etherscan.
+Then, one verb per beat, each typed in the pane belonging to the party that signs it:
 
-Every beat prints the verifier's verdict before it acts, so the terminal shows the refusal before
-the chain does. `forge script script/03_Demo.s.sol:Status --rpc-url sepolia` is a read-only
-snapshot, safe between beats.
+| Pane | Verb | Beat |
+|---|---|---|
+| operator | `provision` | 1 — mint the name, grant zero registry roles, authorize two text keys |
+| agent | `publish` | 2a — endpoint and operating key, from the agent's own key |
+| counterparty | `pay` | 2b — resolve, verify, pay the resolved `addr()` |
+| agent | `rotate` | 2c — rotate the operating key, no operator in the loop |
+| counterparty | `pay` / `pay retired` | 2d — follows the rotation; the retired key is refused |
+| agent | `escape` | 3 — transfer, repoint the resolver, rewrite `addr()`: three reverts |
+| operator | `revoke` | 4 — `unregister()`, the kill switch |
+| counterparty | `pay` | 4 — `Refused(Unresolvable, …)`, mined and clickable |
 
-The beats are rehearsed in CI: `test/SepoliaDeployment.t.sol` forks live Sepolia and runs these
-same script contracts, so a mistake in a demo script fails in `forge test` rather than on camera.
-The recording runbook, including what to show on Etherscan at each beat, is
-[`docs/DEMO.md`](docs/DEMO.md).
+The control room polls the chain every few seconds and holds nothing between frames, so the
+verifier's verdict flips colour on its own when another pane acts — a rotation swaps the two key
+lights, a revocation turns both red. Each shell shows only its latest action and clears itself
+on every command, because the control room's feed already carries the running history in the
+colour of the key that signed each line. Each shell also refuses verbs belonging to another
+party, and the transactions that must **revert** (beat 3, and the refused payments) are sent
+with an explicit gas limit so the failures are mined rather than caught client-side.
+
+A shell in any pane also takes `status`, a free read-only snapshot, and `reput <actor> <verb>`
+runs a single verb without the panes. The whole run works against `anvil --fork-url` unchanged,
+which is how it is tested.
+
+The same beats also exist as `forge script`/`cast` commands, one per beat, in
+[`docs/DEMO-scripts.md`](docs/DEMO-scripts.md) — those are the scripts
+`test/SepoliaDeployment.t.sol` forks live Sepolia to exercise in CI, so a mistake in them fails
+in `forge test` rather than on camera. The recording runbook, including what to say and show at
+each beat, is [`docs/DEMO.md`](docs/DEMO.md).
 
